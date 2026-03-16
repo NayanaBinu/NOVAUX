@@ -1,0 +1,25 @@
+# Use the CPU-only index for smaller, faster builds
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Core Web & DB
+flask
+gunicorn
+flask-cors
+psycopg2-binary
+sqlalchemy
+flask_sqlalchemy
+# AI & Data (CPU Optimized)
+torch==2.4.0+cpu
+sentence-transformers
+mistralai==1.2.0
+numpy
+pandas
+joblib
+xgboost
+
+# Document Processing
+python-docx
+fpdf
+pytesseract
+pdf2image
+Pillow

@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["python311", "tesseract", "poppler_utils"]
+
+[start]
+cmd = "gunicorn main:app --bind 0.0.0.0:$PORT"
