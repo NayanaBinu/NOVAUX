@@ -55,10 +55,10 @@ CORS(app, supports_credentials=True)   # allow cookies/sessions
 
 # --- Configuration ---
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "a-strong-default-secret-key-for-dev")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL", "postgresql://postgres:300234@localhost:5432/startup_assistant"
-)
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+_db_url = os.environ.get("DATABASE_URL", "postgresql://postgres:300234@localhost:5432/startup_assistant")
+# Railway provides postgres:// but SQLAlchemy 2.x requires postgresql://
+_db_url = _db_url.replace("postgres://", "postgresql://", 1)
+app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 
 db.init_app(app)
 
@@ -113,6 +113,9 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL not set")
+
+# Railway provides postgres:// but psycopg2/SQLAlchemy require postgresql://
+DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 url = urlparse(DATABASE_URL)
 
