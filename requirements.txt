@@ -9,7 +9,7 @@ psycopg2-binary
 sqlalchemy
 flask_sqlalchemy
 # AI & Data (CPU Optimized)
-torch==2.4.0+cpu
+torch==2.5.1+cpu
 sentence-transformers
 mistralai==1.2.0
 numpy
