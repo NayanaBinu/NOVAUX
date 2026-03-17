@@ -23,6 +23,10 @@ Predictor/
 # Generated files
 generated_docs/
 
+# FAISS index - DO commit these (needed for Railway deployment)
+!novaux_faiss_index/
+!novaux_bm25_index.pkl
+
 # OS files
 .DS_Store
 Thumbs.db

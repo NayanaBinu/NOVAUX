@@ -23,3 +23,11 @@ fpdf
 pytesseract
 pdf2image
 Pillow
+
+# FAISS RAG (Legal Assistant)
+faiss-cpu
+langchain-community
+langchain-mistralai
+langchain-text-splitters
+pypdf
+rank-bm25

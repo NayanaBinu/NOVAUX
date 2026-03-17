@@ -94,55 +94,42 @@ def extract_text_from_file(file_path, file_ext):
     return text.strip()
 
 
-# --- NEW: RAG initialization (semantic search over legal_docs) ---
-# SentenceTransformer model for embeddings
-# ---------------- RAG v2 INITIALIZATION ---------------- #
+# ---------------- FAISS RAG INITIALIZATION ---------------- #
+print("Loading FAISS RAG index...")
 
-
-
-EMBED_MODEL = "all-MiniLM-L6-v2"
-
-print("Loading embedding model...")
-embedder = SentenceTransformer(EMBED_MODEL)
-
-print("Loading reranker...")
-
-from urllib.parse import urlparse
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL not set")
-
-# Railway provides postgres:// but psycopg2/SQLAlchemy require postgresql://
-DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-url = urlparse(DATABASE_URL)
-
-rag_conn = psycopg2.connect(
-    host=url.hostname,
-    database=url.path[1:],
-    user=url.username,
-    password=url.password,
-    port=url.port
-)
-rag_cur = rag_conn.cursor()
+faiss_vectorstore = None
+try:
+    from langchain_community.vectorstores import FAISS
+    from langchain_mistralai import MistralAIEmbeddings
+    _rag_embeddings = MistralAIEmbeddings(
+        api_key=os.environ.get("MISTRAL_API_KEY"),
+        model="mistral-embed"
+    )
+    faiss_vectorstore = FAISS.load_local(
+        "novaux_faiss_index",
+        _rag_embeddings,
+        allow_dangerous_deserialization=True
+    )
+    logger.info("✅ FAISS RAG index loaded")
+except Exception as e:
+    logger.warning(f"⚠️ FAISS RAG index not available: {e}. Legal assistant will be limited.")
 
 def retrieve(query):
-    query_embedding = embedder.encode(
-        query,
-        normalize_embeddings=True
-    ).tolist()
-
-    rag_cur.execute("""
-        SELECT doc_id, act_name, section, content
-        FROM legal_docs
-        ORDER BY embedding <=> %s::vector
-        LIMIT 20;
-    """, (query_embedding,))
-
-    return rag_cur.fetchall()
-# ✅ RETURN docs, not fetchall() again
+    if not faiss_vectorstore:
+        return []
+    try:
+        docs = faiss_vectorstore.similarity_search(query, k=5)
+        return [
+            {
+                "act": doc.metadata.get("source", "Legal Document"),
+                "section": f"Page {doc.metadata.get('page', '?')}",
+                "content": doc.page_content
+            }
+            for doc in docs
+        ]
+    except Exception as e:
+        logger.exception(f"FAISS retrieval error: {e}")
+        return []
 
 
 def rag_answer_with_llm(query):
@@ -155,14 +142,13 @@ def rag_answer_with_llm(query):
 
     context = ""
     for doc in top_docs:
-        trimmed = doc[3][:800]  # truncate long sections
+        trimmed = doc["content"][:800]  # truncate long sections
         context += f"""
-Act: {doc[1]}
-Section: {doc[2]}
+Act: {doc["act"]}
+Section: {doc["section"]}
 
 {trimmed}
 """
-
 
     # -------- Draft Generation --------
     draft_prompt = f"""
@@ -184,13 +170,12 @@ Answer:
 """
 
     draft_response = mistral_client.chat.complete(
-    model="mistral-small-latest",
-    messages=[
-        {"role": "system", "content": "You are a legal assistant for startups in India."},
-        {"role": "user", "content": draft_prompt}
-    ]
-)
-
+        model="mistral-small-latest",
+        messages=[
+            {"role": "system", "content": "You are a legal assistant for startups in India."},
+            {"role": "user", "content": draft_prompt}
+        ]
+    )
 
     draft_answer = draft_response.choices[0].message.content.strip()
 
@@ -203,12 +188,11 @@ Answer:
 
     final_answer = draft_answer
 
-
     sources = [
         {
-            "act": doc[1],
-            "section": doc[2],
-            "content": doc[3] 
+            "act": doc["act"],
+            "section": doc["section"],
+            "content": doc["content"]
         }
         for doc in top_docs
     ]
@@ -772,13 +756,10 @@ def download_file(filename):
     )
 @app.route("/debug/sample")
 def sample_row():
-    rag_cur.execute("""
-        SELECT doc_id, act_name, section, LEFT(content, 300)
-        FROM legal_docs
-        LIMIT 5;
-    """)
-    rows = rag_cur.fetchall()
-    return jsonify(rows)
+    if not faiss_vectorstore:
+        return jsonify({"error": "FAISS index not loaded"})
+    results = faiss_vectorstore.similarity_search("startup law India", k=5)
+    return jsonify([{"source": d.metadata.get("source"), "content": d.page_content[:300]} for d in results])
 
 @app.route("/api/startup/predict", methods=["POST"])
 def startup_predict():
